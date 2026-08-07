@@ -1,0 +1,9 @@
+node_modules/
+.next/
+*.db
+*.db.json
+clipgenius-db.json
+.env
+.env.local
+public/clips/
+*.zip
