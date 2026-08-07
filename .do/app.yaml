@@ -1,0 +1,17 @@
+name: clipgenius
+region: sgp1
+services:
+  - name: web
+    github:
+      repo: wd7887bm-wq/ClipGenius5
+      branch: main
+    build_command: npm install && npm run build
+    run_command: npm start
+    http_port: $PORT
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22

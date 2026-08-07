@@ -3,7 +3,9 @@
 Convert long YouTube videos into **9:16 vertical clips** with AI-powered captions.  
 Perfect for TikTok, Instagram Reels & YouTube Shorts.
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/wd7887bm-wq/ClipGenius5)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/wd7887bm-wq/ClipGenius5)
+
+[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/wd7887bm-wq/ClipGenius5/tree/main)
 
 ---
 
@@ -18,19 +20,30 @@ Perfect for TikTok, Instagram Reels & YouTube Shorts.
 
 ---
 
-## 🚀 Deploy on Railway (FREE)
+## 🚀 Free Deploy - One Click
 
-### One-Click Deploy:
-👉 **[Click here to deploy on Railway](https://railway.app/new/template?template=https://github.com/wd7887bm-wq/ClipGenius5)**
+### Render.com ⭐ Recommended
+👉 **[Deploy to Render](https://render.com/deploy?repo=https://github.com/wd7887bm-wq/ClipGenius5)**
+- Free tier, no credit card required
+- Auto-builds from GitHub
+- `clipgenius.onrender.com` URL
 
-### Manual Steps:
-1. Go to [railway.app](https://railway.app) and sign in with GitHub
-2. Click **"New Project"** then **"Deploy from GitHub repo"**
-3. Select `wd7887bm-wq/ClipGenius5`
-4. Click **Deploy** and you're done!
+### DigitalOcean App Platform
+👉 **[Deploy to DigitalOcean](https://cloud.digitalocean.com/apps/new?repo=https://github.com/wd7887bm-wq/ClipGenius5/tree/main)**
+- $5/month (or free trial credits)
+- Vertical scaling available
+- Best for production workloads
+
+### Manual Deploy Steps:
+1. Sign in to **[render.com](https://render.com)** or **[cloud.digitalocean.com](https://cloud.digitalocean.com)** with GitHub
+2. Click **"New Web Service"** / **"Create App"**
+3. Select repository `wd7887bm-wq/ClipGenius5`
+4. Build command: `npm install && npm run build`
+5. Start command: `npm start`
+6. Click **Deploy** 🎉
 
 > 🆓 **Free tier**: Works fully in demo mode (UI + simulated processing)  
-> 💎 **Pro plan ($5/mo)**: Full FFmpeg + Python video processing
+> 💎 **Pro plan**: Full FFmpeg + Python video processing with paid plans
 
 ---
 
