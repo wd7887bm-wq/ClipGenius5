@@ -1,3 +1,11 @@
+databases:
+  # Durable PostgreSQL so jobs/clips survive instance sleep & redeploys.
+  # Free databases expire after 30 days on Render — upgrade to a paid plan
+  # (or set DATABASE_URL to an external DB) for production.
+  - name: clipgenius-db
+    plan: free
+    ipAllowList: []
+
 services:
   - type: web
     name: clipgenius
@@ -12,3 +20,9 @@ services:
         value: production
       - key: NODE_VERSION
         value: 22
+      # Auto-injected from the database above. The app gracefully falls back to
+      # the file store if this is ever missing or unreachable.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: clipgenius-db
+          property: connectionString

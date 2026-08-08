@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { spawn, execSync, spawnSync } from "child_process";
 import path from "path";
 import fs from "fs";
-import { ensureSchema } from "@/db/ensure-schema";
+import { ensureSchema, getDbMode } from "@/db/ensure-schema";
 import { checkRateLimit, getClientIdentifier } from "@/lib/rate-limiter";
 import {
   canAcceptNewJob,
@@ -89,10 +89,10 @@ async function mockProcess(jobId: string, outputDir: string, captionStyle: strin
   const dbMod = await import("@/db");
   const sqliteRun = dbMod.sqliteRun;
   const sqliteQuery = dbMod.sqliteQuery;
-  const databaseUrl = process.env.DATABASE_URL;
+  const usePostgres = (await getDbMode()) === "postgres";
 
   const updateJob = async (updates: Record<string, any>) => {
-    if (databaseUrl) {
+    if (usePostgres) {
       const { getDb } = await import("@/db");
       const { jobs } = await import("@/db/schema");
       const { eq } = await import("drizzle-orm");
@@ -298,9 +298,7 @@ export async function POST(req: NextRequest) {
     const outputDir = path.join(clipsBase, jobId);
     fs.mkdirSync(outputDir, { recursive: true });
 
-    const databaseUrl = process.env.DATABASE_URL;
-
-    if (databaseUrl) {
+    if ((await getDbMode()) === "postgres") {
       // PostgreSQL mode
       const { getDb } = await import("@/db");
       const { jobs } = await import("@/db/schema");

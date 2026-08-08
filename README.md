@@ -72,8 +72,12 @@ pip3 install yt-dlp faster-whisper
 
 ## 🗄️ Database
 
-- **Auto mode**: Uses local JSON file (no setup needed)
-- **PostgreSQL**: Set `DATABASE_URL` env variable for production
+The database layer is resilient and **never hard-fails**:
+
+- **PostgreSQL (recommended for production):** `render.yaml` / `.do/app.yaml` auto-provision a free Postgres and wire `DATABASE_URL` for you. Just set `DATABASE_URL` manually for any other host.
+- **File-store fallback (zero setup):** If `DATABASE_URL` is missing or Postgres can't be reached, the app automatically falls back to a memory-backed JSON store with atomic disk writes — so the UI and jobs keep working instead of showing "Database error".
+
+Which backend is in use is resolved once per process; `/api/health` reports it as `"db": "postgresql"` or `"file"`.
 
 ---
 
@@ -82,7 +86,7 @@ pip3 install yt-dlp faster-whisper
 - **Frontend**: Next.js 16, React 19, Tailwind CSS 4
 - **Backend**: Next.js API Routes
 - **Processing**: Python (yt-dlp, faster-whisper, FFmpeg)
-- **Database**: PostgreSQL (optional) / JSON fallback
+- **Database**: PostgreSQL (auto-provisioned on Render/DO) / resilient JSON fallback
 
 ---
 

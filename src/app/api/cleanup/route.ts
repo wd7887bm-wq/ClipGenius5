@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { ensureSchema } from "@/db/ensure-schema";
+import { ensureSchema, getDbMode } from "@/db/ensure-schema";
 import { eq, lt } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -14,11 +14,10 @@ export async function POST() {
   try {
     await ensureSchema();
 
-    const databaseUrl = process.env.DATABASE_URL;
     let expiredJobIds: string[] = [];
     let dbDeleted = 0;
 
-    if (databaseUrl) {
+    if ((await getDbMode()) === "postgres") {
       // PostgreSQL
       const { getDb } = await import("@/db");
       const { jobs } = await import("@/db/schema");

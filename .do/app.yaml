@@ -1,5 +1,12 @@
 name: clipgenius
 region: sgp1
+# Durable PostgreSQL so jobs/clips survive redeploys & scaling.
+# DO App Platform auto-provides DATABASE_URL to services in the same app.
+databases:
+  - name: clipgenius-db
+    engine: PG
+    version: "15"
+    production: false
 services:
   - name: web
     github:
@@ -14,4 +21,4 @@ services:
       - key: NODE_ENV
         value: production
       - key: NODE_VERSION
-        value: 22
+        value: "22"

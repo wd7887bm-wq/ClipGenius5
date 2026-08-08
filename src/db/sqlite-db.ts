@@ -1,19 +1,62 @@
 /**
  * File-based JSON database (simple, no dependencies)
- * Used as fallback when PostgreSQL is not configured
- * 
+ * Used as the durable fallback when PostgreSQL is not configured/unreachable.
+ *
  * Supports basic SQL-like operations: SELECT, INSERT, UPDATE, DELETE
+ *
+ * Robustness notes:
+ *  - Picks a writable location automatically (cwd -> os.tmpdir()) so it never
+ *    crashes with EROFS on serverless platforms that expose a read-only fs.
+ *  - Always keeps an in-memory copy and write-throughs to disk best-effort, so
+ *    the app keeps working even if the filesystem cannot be written to.
+ *  - Writes are atomic (temp file + rename) so a crash can't corrupt the store.
  */
 import fs from "fs";
+import os from "os";
 import path from "path";
 
-const DB_PATH = (() => {
-  // Vercel: use /tmp for writable storage
-  if (process.env.VERCEL || process.env.VERCEL_ENV) {
-    return "/tmp/clipgenius-db.json";
+const DB_FILENAME = "clipgenius-db.json";
+
+function resolveDbPath(): string {
+  // 1. Explicit override wins
+  if (process.env.DB_FILE_PATH) return process.env.DB_FILE_PATH;
+
+  const candidates: string[] = [];
+
+  // 2. Known serverless platforms provide a writable /tmp only
+  if (
+    process.env.VERCEL ||
+    process.env.VERCEL_ENV ||
+    process.env.NETLIFY ||
+    process.env.NETLIFY_DEV
+  ) {
+    candidates.push(path.join("/tmp", DB_FILENAME));
   }
-  return path.join(process.cwd(), "clipgenius-db.json");
-})();
+
+  // 3. The app working directory (Render, DO App Platform, VPS, local)
+  candidates.push(path.join(process.cwd(), DB_FILENAME));
+
+  // 4. OS temp dir as a last-resort writable location
+  candidates.push(path.join(os.tmpdir(), DB_FILENAME));
+
+  for (const candidate of candidates) {
+    try {
+      fs.mkdirSync(path.dirname(candidate), { recursive: true });
+      const probe = `${candidate}.wtest`;
+      fs.writeFileSync(probe, "");
+      fs.unlinkSync(probe);
+      return candidate;
+    } catch {
+      // not writable, try the next candidate
+    }
+  }
+
+  // Absolute last resort
+  return path.join(os.tmpdir(), DB_FILENAME);
+}
+
+const DB_PATH = resolveDbPath();
+console.log(`[JSON-DB] Using store at ${DB_PATH}`);
 
 interface JobRecord {
   id: string;
@@ -34,7 +77,11 @@ interface DbData {
   jobs: JobRecord[];
 }
 
-function readDb(): DbData {
+// In-memory copy so reads always work even if the disk write fails or the
+// filesystem is read-only. Seeded lazily from disk on first access.
+let memory: DbData | null = null;
+
+function readDbFromDisk(): DbData {
   try {
     if (fs.existsSync(DB_PATH)) {
       const raw = fs.readFileSync(DB_PATH, "utf-8");
@@ -47,12 +94,27 @@ function readDb(): DbData {
   return { jobs: [] };
 }
 
-function writeDb(data: DbData) {
+function load(): DbData {
+  if (memory) return memory;
+  memory = readDbFromDisk();
+  return memory;
+}
+
+function writeDbToDisk(data: DbData) {
   try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), "utf-8");
+    // Atomic write: temp file + rename so a crash mid-write can't corrupt the DB
+    const tmp = `${DB_PATH}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf-8");
+    fs.renameSync(tmp, DB_PATH);
   } catch (e) {
-    console.error("[JSON-DB] Write error:", e);
+    // Non-fatal: in-memory copy still holds the latest state for this instance.
+    console.error("[JSON-DB] Write error (non-fatal, state kept in memory):", e);
   }
+}
+
+function commit(data: DbData) {
+  memory = data;
+  writeDbToDisk(data);
 }
 
 /**
@@ -141,7 +203,7 @@ function parseInsert(sql: string, params: any[]): { record: Record<string, any> 
 }
 
 export async function query(sql: string, params: any[] = []): Promise<any[]> {
-  const data = readDb();
+  const data = load();
   const upperSql = sql.trim().toUpperCase();
 
   if (upperSql.startsWith("SELECT")) {
@@ -203,7 +265,7 @@ export async function query(sql: string, params: any[] = []): Promise<any[]> {
 }
 
 export async function run(sql: string, params: any[] = []): Promise<{ changes: number }> {
-  const data = readDb();
+  const data = load();
   const upperSql = sql.trim().toUpperCase();
 
   if (upperSql.startsWith("UPDATE")) {
@@ -252,7 +314,7 @@ export async function run(sql: string, params: any[] = []): Promise<{ changes: n
         return j;
       });
 
-      if (changes > 0) writeDb(data);
+      if (changes > 0) commit(data);
       return { changes };
     }
   }
@@ -277,7 +339,7 @@ export async function run(sql: string, params: any[] = []): Promise<{ changes: n
         created_at: record.created_at || new Date().toISOString(),
         updated_at: record.updated_at || new Date().toISOString(),
       });
-      writeDb(data);
+      commit(data);
       return { changes: 1 };
     }
   }
@@ -298,7 +360,7 @@ export async function run(sql: string, params: any[] = []): Promise<{ changes: n
       });
 
       if (data.jobs.length < before) {
-        writeDb(data);
+        commit(data);
         return { changes: before - data.jobs.length };
       }
     }

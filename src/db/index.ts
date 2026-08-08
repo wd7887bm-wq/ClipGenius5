@@ -1,11 +1,14 @@
 /**
- * Database layer - uses PostgreSQL when DATABASE_URL is set, falls back to SQLite
+ * Database layer - uses PostgreSQL when DATABASE_URL is set AND reachable,
+ * otherwise falls back to the resilient file-based store (see ./sqlite-db.ts).
+ *
+ * Note: getDbMode() in ./ensure-schema.ts is the single source of truth for
+ * which backend is in use; routes should call it rather than reading
+ * process.env.DATABASE_URL directly.
  */
 import { drizzle, NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { query as sqliteQuery, run as sqliteRun } from "./sqlite-db";
-
-const sqliteAvailable = true; // Always available since sql.js is pure JS
 
 const globalForDb = globalThis as typeof globalThis & {
   __arenaNextJsPostgresqlPool?: Pool;
@@ -126,4 +129,4 @@ export const db = new Proxy({} as any, {
   }
 });
 
-export { sqliteQuery, sqliteRun, sqliteAvailable };
+export { sqliteQuery, sqliteRun };
