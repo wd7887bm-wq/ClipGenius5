@@ -8,3 +8,5 @@ clipgenius-db.json
 public/clips/
 *.zip
 *.tsbuildinfo
+__pycache__/
+*.pyc

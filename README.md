@@ -42,8 +42,7 @@ Perfect for TikTok, Instagram Reels & YouTube Shorts.
 5. Start command: `npm start`
 6. Click **Deploy** 🎉
 
-> 🆓 **Free tier**: Works fully in demo mode (UI + simulated processing)  
-> 💎 **Pro plan**: Full FFmpeg + Python video processing with paid plans
+> 🆓 **Free tier**: Real FFmpeg + yt-dlp + faster-whisper processing via `scripts/setup.sh` (auto-runs on start). The UI also has a graceful demo fallback if the tools can't be installed.
 
 ---
 
@@ -57,16 +56,17 @@ npm run dev
 # Open http://localhost:3000
 ```
 
-For **real video processing**, also install:
+For **real video processing**, the toolchain installs itself — just run:
 ```bash
-# Ubuntu/Debian
-sudo apt install ffmpeg
-pip3 install yt-dlp faster-whisper
-
-# macOS  
-brew install ffmpeg
-pip3 install yt-dlp faster-whisper
+bash scripts/setup.sh
 ```
+This installs (PyPI-first, no apt/sudo required for ffmpeg):
+- `ffmpeg` (static binary bundled in the `imageio-ffmpeg` wheel)
+- `yt-dlp` (YouTube downloader)
+- `faster-whisper` (AI transcription for captions)
+- `moviepy`, `psycopg2-binary`
+
+Render / DigitalOcean deploys run `scripts/setup.sh` automatically on start (see `render.yaml` / `.do/app.yaml`).
 
 ---
 

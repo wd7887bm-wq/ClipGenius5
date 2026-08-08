@@ -11,7 +11,7 @@ services:
     name: clipgenius
     env: node
     buildCommand: npm install && npm run build
-    startCommand: npm start
+    startCommand: bash scripts/setup.sh && npm start
     plan: free
     autoDeploy: true
     healthCheckPath: /api/health

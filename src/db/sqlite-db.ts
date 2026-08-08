@@ -2,13 +2,14 @@
  * File-based JSON database (simple, no dependencies)
  * Used as the durable fallback when PostgreSQL is not configured/unreachable.
  *
- * Supports basic SQL-like operations: SELECT, INSERT, UPDATE, DELETE
+ * Architecture: the Node API process and the Python video worker are SEPARATE
+ * processes that share this one JSON file. The worker writes progress; the API
+ * reads it. Therefore every read re-reads fresh from disk so the API sees the
+ * worker's updates. Memory is only a fallback when the file is unreadable.
  *
- * Robustness notes:
+ * Other notes:
  *  - Picks a writable location automatically (cwd -> os.tmpdir()) so it never
  *    crashes with EROFS on serverless platforms that expose a read-only fs.
- *  - Always keeps an in-memory copy and write-throughs to disk best-effort, so
- *    the app keeps working even if the filesystem cannot be written to.
  *  - Writes are atomic (temp file + rename) so a crash can't corrupt the store.
  */
 import fs from "fs";
@@ -58,6 +59,12 @@ function resolveDbPath(): string {
 const DB_PATH = resolveDbPath();
 console.log(`[JSON-DB] Using store at ${DB_PATH}`);
 
+/** Expose the resolved store path so the Python worker can be pointed at the
+ *  exact same file (passed via the DB_FILE_PATH env var when spawning it). */
+export function getDbFilePath(): string {
+  return DB_PATH;
+}
+
 interface JobRecord {
   id: string;
   youtube_url: string;
@@ -77,8 +84,9 @@ interface DbData {
   jobs: JobRecord[];
 }
 
-// In-memory copy so reads always work even if the disk write fails or the
-// filesystem is read-only. Seeded lazily from disk on first access.
+// Last-known-good in-memory copy. Used only as a fallback when the file is
+// missing or unreadable; reads normally re-read fresh from disk so the API
+// process observes updates written by the separate Python worker process.
 let memory: DbData | null = null;
 
 function readDbFromDisk(): DbData {
@@ -95,8 +103,18 @@ function readDbFromDisk(): DbData {
 }
 
 function load(): DbData {
-  if (memory) return memory;
-  memory = readDbFromDisk();
+  // Always read fresh from disk when the file exists, so we pick up writes made
+  // by other processes (the Python video worker). Fall back to the in-memory
+  // copy only when the file is missing or unreadable.
+  try {
+    if (fs.existsSync(DB_PATH)) {
+      memory = readDbFromDisk();
+      return memory;
+    }
+  } catch {
+    // ignore, use memory
+  }
+  if (!memory) memory = { jobs: [] };
   return memory;
 }
 

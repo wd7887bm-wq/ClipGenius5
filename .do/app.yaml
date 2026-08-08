@@ -13,7 +13,7 @@ services:
       repo: wd7887bm-wq/ClipGenius5
       branch: main
     build_command: npm install && npm run build
-    run_command: npm start
+    run_command: bash scripts/setup.sh && npm start
     http_port: $PORT
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-0.5gb

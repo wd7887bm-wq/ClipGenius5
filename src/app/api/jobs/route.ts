@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { spawn, execSync, spawnSync } from "child_process";
 import path from "path";
 import fs from "fs";
+import os from "os";
 import { ensureSchema, getDbMode } from "@/db/ensure-schema";
 import { checkRateLimit, getClientIdentifier } from "@/lib/rate-limiter";
 import {
@@ -11,6 +12,7 @@ import {
   decrementWorkers,
   getSystemStats,
 } from "@/lib/system-health";
+import { getDbFilePath } from "@/db/sqlite-db";
 
 export const dynamic = "force-dynamic";
 
@@ -272,6 +274,9 @@ export async function POST(req: NextRequest) {
     if (!url || typeof url !== "string") {
       return NextResponse.json({ error: "YouTube URL required" }, { status: 400 });
     }
+    // Validate caption style against a whitelist (also avoids shell injection
+    // since it is interpolated into the worker command below)
+    const style = captionStyle === "monoline" ? "monoline" : "oneword";
     const ytRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|shorts\/|embed\/)|youtu\.be\/)/;
     if (!ytRegex.test(url)) {
       return NextResponse.json({ error: "Invalid YouTube URL" }, { status: 400 });
@@ -306,14 +311,14 @@ export async function POST(req: NextRequest) {
       await db.insert(jobs).values({
         id: jobId,
         youtubeUrl: url,
-        captionStyle,
+        captionStyle: style,
         status: "pending",
         progress: 0,
         progressMessage: "Starting...",
         expiresAt: new Date(Date.now() + 3600000),
       });
     } else {
-      // SQLite mode
+      // File store mode
       const { sqliteRun } = await import("@/db");
       if (sqliteRun) {
         const now = new Date().toISOString();
@@ -321,7 +326,7 @@ export async function POST(req: NextRequest) {
         await sqliteRun(
           `INSERT OR REPLACE INTO jobs (id, youtube_url, caption_style, status, progress, progress_message, expires_at, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [jobId, url, captionStyle, "pending", 0, "Starting...", expiresAt, now, now]
+          [jobId, url, style, "pending", 0, "Starting...", expiresAt, now, now]
         );
       }
     }
@@ -333,17 +338,29 @@ export async function POST(req: NextRequest) {
 
     if (hasRealTools) {
       // Real processing via Python
+      const dbMode = await getDbMode();
+      // Broad PATH so ffmpeg/yt-dlp/python3 are found whether installed via
+      // system package manager, pip --user, or the imageio-ffmpeg wheel.
+      const workerPath = [
+        "/usr/local/bin", "/usr/bin",
+        path.join(os.homedir(), ".local/bin"),
+        process.env.PATH || "",
+      ].join(":");
       const scriptPath = path.join(process.cwd(), "scripts", "process_video.py");
       const child = spawn("/bin/bash", ["-c",
-        `export PATH="/usr/local/bin:/usr/bin:$PATH" && python3 "${scriptPath}" "${jobId}" "${url}" "${outputDir}" "${captionStyle}"`
+        `export PATH="${workerPath}" && python3 "${scriptPath}" "${jobId}" "${url}" "${outputDir}" "${style}"`
       ], {
         detached: true,
         stdio: ["ignore", "pipe", "pipe"],
         cwd: process.cwd(),
         env: {
           ...process.env,
-          PATH: "/usr/local/bin:/usr/bin:" + (process.env.PATH || ""),
+          PATH: workerPath,
           DATABASE_URL: process.env.DATABASE_URL || "",
+          // Tell the worker which backend AND which shared store file to use,
+          // so Node and Python always read/write the same place.
+          DB_MODE: dbMode,
+          DB_FILE_PATH: getDbFilePath(),
         },
       });
 
@@ -361,8 +378,8 @@ export async function POST(req: NextRequest) {
       });
       child.unref();
     } else {
-      // Mock processing
-      mockProcess(jobId, outputDir, captionStyle, url);
+      // Mock processing (only when ffmpeg/yt-dlp are not installed)
+      mockProcess(jobId, outputDir, style, url);
     }
 
     return NextResponse.json({ jobId, status: "pending" });
