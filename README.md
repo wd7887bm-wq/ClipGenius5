@@ -62,25 +62,17 @@ koyeb app init clipgenius \
 
 ## 🖥️ Run on Your Laptop
 
+👉 **Full local guide (Roman Urdu): [`LOCAL.md`](./LOCAL.md)** — zero database setup, step-by-step Linux/macOS/Windows.
+
+Short version:
 ```bash
 git clone https://github.com/wd7887bm-wq/ClipGenius5.git
 cd ClipGenius5
 npm install
-npm run dev
-# Open http://localhost:3000
+npm run setup     # installs ffmpeg + yt-dlp + faster-whisper (Linux/macOS)
+npm run dev       # open http://localhost:3000
 ```
-
-For **real video processing**, the toolchain installs itself — just run:
-```bash
-bash scripts/setup.sh
-```
-This installs (PyPI-first, no apt/sudo required for ffmpeg):
-- `ffmpeg` (static binary bundled in the `imageio-ffmpeg` wheel)
-- `yt-dlp` (YouTube downloader)
-- `faster-whisper` (AI transcription for captions)
-- `moviepy`, `psycopg2-binary`
-
-Render / DigitalOcean deploys run `scripts/setup.sh` automatically on start (see `render.yaml` / `.do/app.yaml`).
+> 💾 Database needs **no setup** locally — the app auto-creates `clipgenius-db.json`.
 
 ---
 
