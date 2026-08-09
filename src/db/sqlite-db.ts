@@ -1,19 +1,69 @@
 /**
  * File-based JSON database (simple, no dependencies)
- * Used as fallback when PostgreSQL is not configured
- * 
- * Supports basic SQL-like operations: SELECT, INSERT, UPDATE, DELETE
+ * Used as the durable fallback when PostgreSQL is not configured/unreachable.
+ *
+ * Architecture: the Node API process and the Python video worker are SEPARATE
+ * processes that share this one JSON file. The worker writes progress; the API
+ * reads it. Therefore every read re-reads fresh from disk so the API sees the
+ * worker's updates. Memory is only a fallback when the file is unreadable.
+ *
+ * Other notes:
+ *  - Picks a writable location automatically (cwd -> os.tmpdir()) so it never
+ *    crashes with EROFS on serverless platforms that expose a read-only fs.
+ *  - Writes are atomic (temp file + rename) so a crash can't corrupt the store.
  */
 import fs from "fs";
+import os from "os";
 import path from "path";
 
-const DB_PATH = (() => {
-  // Vercel: use /tmp for writable storage
-  if (process.env.VERCEL || process.env.VERCEL_ENV) {
-    return "/tmp/clipgenius-db.json";
+const DB_FILENAME = "clipgenius-db.json";
+
+function resolveDbPath(): string {
+  // 1. Explicit override wins
+  if (process.env.DB_FILE_PATH) return process.env.DB_FILE_PATH;
+
+  const candidates: string[] = [];
+
+  // 2. Known serverless platforms provide a writable /tmp only
+  if (
+    process.env.VERCEL ||
+    process.env.VERCEL_ENV ||
+    process.env.NETLIFY ||
+    process.env.NETLIFY_DEV
+  ) {
+    candidates.push(path.join("/tmp", DB_FILENAME));
   }
-  return path.join(process.cwd(), "clipgenius-db.json");
-})();
+
+  // 3. The app working directory (Render, DO App Platform, VPS, local)
+  candidates.push(path.join(process.cwd(), DB_FILENAME));
+
+  // 4. OS temp dir as a last-resort writable location
+  candidates.push(path.join(os.tmpdir(), DB_FILENAME));
+
+  for (const candidate of candidates) {
+    try {
+      fs.mkdirSync(path.dirname(candidate), { recursive: true });
+      const probe = `${candidate}.wtest`;
+      fs.writeFileSync(probe, "");
+      fs.unlinkSync(probe);
+      return candidate;
+    } catch {
+      // not writable, try the next candidate
+    }
+  }
+
+  // Absolute last resort
+  return path.join(os.tmpdir(), DB_FILENAME);
+}
+
+const DB_PATH = resolveDbPath();
+console.log(`[JSON-DB] Using store at ${DB_PATH}`);
+
+/** Expose the resolved store path so the Python worker can be pointed at the
+ *  exact same file (passed via the DB_FILE_PATH env var when spawning it). */
+export function getDbFilePath(): string {
+  return DB_PATH;
+}
 
 interface JobRecord {
   id: string;
@@ -34,7 +84,12 @@ interface DbData {
   jobs: JobRecord[];
 }
 
-function readDb(): DbData {
+// Last-known-good in-memory copy. Used only as a fallback when the file is
+// missing or unreadable; reads normally re-read fresh from disk so the API
+// process observes updates written by the separate Python worker process.
+let memory: DbData | null = null;
+
+function readDbFromDisk(): DbData {
   try {
     if (fs.existsSync(DB_PATH)) {
       const raw = fs.readFileSync(DB_PATH, "utf-8");
@@ -47,12 +102,37 @@ function readDb(): DbData {
   return { jobs: [] };
 }
 
-function writeDb(data: DbData) {
+function load(): DbData {
+  // Always read fresh from disk when the file exists, so we pick up writes made
+  // by other processes (the Python video worker). Fall back to the in-memory
+  // copy only when the file is missing or unreadable.
   try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), "utf-8");
-  } catch (e) {
-    console.error("[JSON-DB] Write error:", e);
+    if (fs.existsSync(DB_PATH)) {
+      memory = readDbFromDisk();
+      return memory;
+    }
+  } catch {
+    // ignore, use memory
   }
+  if (!memory) memory = { jobs: [] };
+  return memory;
+}
+
+function writeDbToDisk(data: DbData) {
+  try {
+    // Atomic write: temp file + rename so a crash mid-write can't corrupt the DB
+    const tmp = `${DB_PATH}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf-8");
+    fs.renameSync(tmp, DB_PATH);
+  } catch (e) {
+    // Non-fatal: in-memory copy still holds the latest state for this instance.
+    console.error("[JSON-DB] Write error (non-fatal, state kept in memory):", e);
+  }
+}
+
+function commit(data: DbData) {
+  memory = data;
+  writeDbToDisk(data);
 }
 
 /**
@@ -141,7 +221,7 @@ function parseInsert(sql: string, params: any[]): { record: Record<string, any> 
 }
 
 export async function query(sql: string, params: any[] = []): Promise<any[]> {
-  const data = readDb();
+  const data = load();
   const upperSql = sql.trim().toUpperCase();
 
   if (upperSql.startsWith("SELECT")) {
@@ -203,7 +283,7 @@ export async function query(sql: string, params: any[] = []): Promise<any[]> {
 }
 
 export async function run(sql: string, params: any[] = []): Promise<{ changes: number }> {
-  const data = readDb();
+  const data = load();
   const upperSql = sql.trim().toUpperCase();
 
   if (upperSql.startsWith("UPDATE")) {
@@ -252,7 +332,7 @@ export async function run(sql: string, params: any[] = []): Promise<{ changes: n
         return j;
       });
 
-      if (changes > 0) writeDb(data);
+      if (changes > 0) commit(data);
       return { changes };
     }
   }
@@ -277,7 +357,7 @@ export async function run(sql: string, params: any[] = []): Promise<{ changes: n
         created_at: record.created_at || new Date().toISOString(),
         updated_at: record.updated_at || new Date().toISOString(),
       });
-      writeDb(data);
+      commit(data);
       return { changes: 1 };
     }
   }
@@ -298,7 +378,7 @@ export async function run(sql: string, params: any[] = []): Promise<{ changes: n
       });
 
       if (data.jobs.length < before) {
-        writeDb(data);
+        commit(data);
         return { changes: before - data.jobs.length };
       }
     }

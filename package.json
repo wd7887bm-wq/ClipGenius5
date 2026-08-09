@@ -5,6 +5,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "setup": "bash scripts/setup.sh",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },

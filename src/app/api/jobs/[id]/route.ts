@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { ensureSchema } from "@/db/ensure-schema";
+import { ensureSchema, getDbMode } from "@/db/ensure-schema";
 import { jobQueue } from "@/lib/queue";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +21,9 @@ export async function GET(
       return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
     }
 
-    const databaseUrl = process.env.DATABASE_URL;
     let job: any = null;
 
-    if (databaseUrl) {
+    if ((await getDbMode()) === "postgres") {
       // PostgreSQL
       const { getDb } = await import("@/db");
       const { jobs } = await import("@/db/schema");
@@ -115,9 +114,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
     }
 
-    const databaseUrl = process.env.DATABASE_URL;
-
-    if (databaseUrl) {
+    if ((await getDbMode()) === "postgres") {
       const { getDb } = await import("@/db");
       const { jobs } = await import("@/db/schema");
       const db = getDb()!;

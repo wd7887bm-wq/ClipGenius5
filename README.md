@@ -34,6 +34,20 @@ Perfect for TikTok, Instagram Reels & YouTube Shorts.
 - Vertical scaling available
 - Best for production workloads
 
+### Koyeb (Dockerfile, real processing)
+The repo ships a `Dockerfile` that bakes in **ffmpeg + yt-dlp + faster-whisper + moviepy**, so you get real video processing out of the box. Install the [Koyeb CLI](https://www.koyeb.com/docs/build-and-deploy/cli/reference), then:
+```bash
+koyeb login
+koyeb app init clipgenius \
+  --git github.com/wd7887bm-wq/ClipGenius5 \
+  --git-branch main \
+  --git-builder docker \
+  --ports 3000:http \
+  --routes /:3000 \
+  --env PORT=3000
+```
+> Note: use `--git-builder docker` (not `buildpack`) so the toolchain is installed. For durable jobs across redeploys, add `--env DATABASE_URL=postgres://...`.
+
 ### Manual Deploy Steps:
 1. Sign in to **[render.com](https://render.com)** or **[cloud.digitalocean.com](https://cloud.digitalocean.com)** with GitHub
 2. Click **"New Web Service"** / **"Create App"**
@@ -42,38 +56,34 @@ Perfect for TikTok, Instagram Reels & YouTube Shorts.
 5. Start command: `npm start`
 6. Click **Deploy** 🎉
 
-> 🆓 **Free tier**: Works fully in demo mode (UI + simulated processing)  
-> 💎 **Pro plan**: Full FFmpeg + Python video processing with paid plans
+> 🆓 **Free tier**: Real FFmpeg + yt-dlp + faster-whisper processing via `scripts/setup.sh` (auto-runs on start). The UI also has a graceful demo fallback if the tools can't be installed.
 
 ---
 
 ## 🖥️ Run on Your Laptop
 
+👉 **Full local guide (Roman Urdu): [`LOCAL.md`](./LOCAL.md)** — zero database setup, step-by-step Linux/macOS/Windows.
+
+Short version:
 ```bash
 git clone https://github.com/wd7887bm-wq/ClipGenius5.git
 cd ClipGenius5
 npm install
-npm run dev
-# Open http://localhost:3000
+npm run setup     # installs ffmpeg + yt-dlp + faster-whisper (Linux/macOS)
+npm run dev       # open http://localhost:3000
 ```
-
-For **real video processing**, also install:
-```bash
-# Ubuntu/Debian
-sudo apt install ffmpeg
-pip3 install yt-dlp faster-whisper
-
-# macOS  
-brew install ffmpeg
-pip3 install yt-dlp faster-whisper
-```
+> 💾 Database needs **no setup** locally — the app auto-creates `clipgenius-db.json`.
 
 ---
 
 ## 🗄️ Database
 
-- **Auto mode**: Uses local JSON file (no setup needed)
-- **PostgreSQL**: Set `DATABASE_URL` env variable for production
+The database layer is resilient and **never hard-fails**:
+
+- **PostgreSQL (recommended for production):** `render.yaml` / `.do/app.yaml` auto-provision a free Postgres and wire `DATABASE_URL` for you. Just set `DATABASE_URL` manually for any other host.
+- **File-store fallback (zero setup):** If `DATABASE_URL` is missing or Postgres can't be reached, the app automatically falls back to a memory-backed JSON store with atomic disk writes — so the UI and jobs keep working instead of showing "Database error".
+
+Which backend is in use is resolved once per process; `/api/health` reports it as `"db": "postgresql"` or `"file"`.
 
 ---
 
@@ -82,7 +92,7 @@ pip3 install yt-dlp faster-whisper
 - **Frontend**: Next.js 16, React 19, Tailwind CSS 4
 - **Backend**: Next.js API Routes
 - **Processing**: Python (yt-dlp, faster-whisper, FFmpeg)
-- **Database**: PostgreSQL (optional) / JSON fallback
+- **Database**: PostgreSQL (auto-provisioned on Render/DO) / resilient JSON fallback
 
 ---
 

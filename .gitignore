@@ -7,3 +7,6 @@ clipgenius-db.json
 .env.local
 public/clips/
 *.zip
+*.tsbuildinfo
+__pycache__/
+*.pyc

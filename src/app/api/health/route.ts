@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { ensureSchema } from "@/db/ensure-schema";
+import { ensureSchema, getDbMode } from "@/db/ensure-schema";
 
 export const dynamic = "force-dynamic";
 
@@ -7,14 +7,14 @@ export async function GET() {
   try {
     await ensureSchema();
 
-    const databaseUrl = process.env.DATABASE_URL;
+    const mode = await getDbMode();
 
-    if (databaseUrl) {
+    if (mode === "postgres") {
       const { getDb } = await import("@/db");
       const db = getDb()!;
       await db.execute(sql`select 1`);
     } else {
-      // SQLite check
+      // File store check
       const { sqliteQuery } = await import("@/db");
       if (sqliteQuery) {
         await sqliteQuery("SELECT 1");
@@ -23,7 +23,7 @@ export async function GET() {
       }
     }
 
-    return Response.json({ ok: true, db: databaseUrl ? "postgresql" : "sqlite" });
+    return Response.json({ ok: true, db: mode === "postgres" ? "postgresql" : "file" });
   } catch (error) {
     console.error("Health check failed:", error);
     return Response.json({ ok: false, error: String(error) }, { status: 500 });
