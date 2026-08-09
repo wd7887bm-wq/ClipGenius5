@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.gitignore
+*.log
+npm-debug.log*
+.DS_Store
+clipgenius-db.json
+clipgenius*.db
+public/clips
+__pycache__
+*.pyc
+youtube-to-shorts-generator*.zip
+.env
+.env.local

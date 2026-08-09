@@ -34,6 +34,20 @@ Perfect for TikTok, Instagram Reels & YouTube Shorts.
 - Vertical scaling available
 - Best for production workloads
 
+### Koyeb (Dockerfile, real processing)
+The repo ships a `Dockerfile` that bakes in **ffmpeg + yt-dlp + faster-whisper + moviepy**, so you get real video processing out of the box. Install the [Koyeb CLI](https://www.koyeb.com/docs/build-and-deploy/cli/reference), then:
+```bash
+koyeb login
+koyeb app init clipgenius \
+  --git github.com/wd7887bm-wq/ClipGenius5 \
+  --git-branch main \
+  --git-builder docker \
+  --ports 3000:http \
+  --routes /:3000 \
+  --env PORT=3000
+```
+> Note: use `--git-builder docker` (not `buildpack`) so the toolchain is installed. For durable jobs across redeploys, add `--env DATABASE_URL=postgres://...`.
+
 ### Manual Deploy Steps:
 1. Sign in to **[render.com](https://render.com)** or **[cloud.digitalocean.com](https://cloud.digitalocean.com)** with GitHub
 2. Click **"New Web Service"** / **"Create App"**
